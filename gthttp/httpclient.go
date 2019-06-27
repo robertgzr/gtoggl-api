@@ -38,6 +38,7 @@ type TogglHttpClient struct {
 	rateLimiter *throttled.GCRARateLimiter
 	perSec      int
 	cookie      *http.Cookie
+	apiToken    string
 }
 
 type TogglError struct {
@@ -162,6 +163,13 @@ func SetInfoLogger(l Logger) ClientOptionFunc {
 	}
 }
 
+func AlwaysUseAPIToken(key string) ClientOptionFunc {
+	return func(c *TogglHttpClient) error {
+		c.apiToken = key
+		return nil
+	}
+}
+
 type nullLogger struct{}
 
 func (l *nullLogger) Printf(format string, v ...interface{}) {
@@ -170,6 +178,10 @@ func (l *nullLogger) Printf(format string, v ...interface{}) {
 var defaultLogger = &nullLogger{}
 
 func (c *TogglHttpClient) authenticate(key string) ([]byte, error) {
+	if c.apiToken != "" {
+		return nil, nil
+	}
+
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", c.Url, "sessions"), nil)
 	if err != nil {
 		return nil, err
@@ -226,7 +238,11 @@ func requestWithLimit(c *TogglHttpClient, method, endpoint string, b interface{}
 	if err != nil {
 		return nil, err
 	}
-	req.AddCookie(c.cookie)
+	if c.apiToken != "" {
+		req.SetBasicAuth(c.apiToken, c.password)
+	} else {
+		req.AddCookie(c.cookie)
+	}
 	c.dumpRequest(req)
 	resp, err := c.client.Do(req)
 	if err != nil {
